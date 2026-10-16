@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hayal Et, Görsel Olsun</title>
+<style>
+  :root { --bg:#e8edf1; --ink:#14202b; --muted:#5d6b78; --accent:#2f4bff; --panel:#fff; --line:#c9d3db; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#101820; --ink:#e8edf1; --muted:#8d9bab; --accent:#7f93ff; --panel:#18232e; --line:#2c3a48; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; line-height:1.5; min-height:100vh; }
+  main { max-width:640px; margin:0 auto; padding:40px 20px 60px; }
+  h1 { font-family:Georgia,serif; font-size:clamp(2rem,8vw,3.2rem); line-height:1.1; margin:0 0 10px; letter-spacing:-0.02em; }
+  p.sub { color:var(--muted); margin:0 0 28px; max-width:46ch; }
+  textarea { width:100%; min-height:110px; padding:14px; border:1.5px solid var(--line); border-radius:10px; background:var(--panel); color:var(--ink); font:inherit; resize:vertical; }
+  textarea:focus, button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 18px; }
+  .chip { border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:999px; padding:6px 12px; font:inherit; font-size:.85rem; cursor:pointer; }
+  #go { width:100%; padding:14px; border:0; border-radius:10px; background:var(--accent); color:#fff; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; }
+  #go:disabled { opacity:.6; cursor:wait; }
+  #stage { margin-top:28px; aspect-ratio:1/1; border:1.5px dashed var(--line); border-radius:12px; display:grid; place-items:center; overflow:hidden; color:var(--muted); text-align:center; padding:16px; }
+  #stage img { width:100%; height:100%; object-fit:cover; display:block; }
+  #stage.has-img { border-style:solid; padding:0; }
+  #actions { margin-top:12px; display:none; }
+  #actions a { color:var(--accent); font-weight:700; text-decoration:none; }
+  #err { color:#c0392b; margin-top:12px; min-height:1.4em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hayal et, görsel olsun.</h1>
+  <p class="sub">Ne görmek istediğini yaz, birkaç saniyede yapay zeka çizsin. İngilizce açıklamalar genelde daha iyi sonuç verir.</p>
+  <textarea id="prompt" maxlength="500" placeholder="Örn: a red fox reading a book under a lantern, watercolor"></textarea>
+  <div class="chips">
+    <button class="chip" type="button">neon lit Tokyo street at night, rain</button>
+    <button class="chip" type="button">a cozy cabin in snowy mountains, oil painting</button>
+    <button class="chip" type="button">astronaut cat floating in space, 3D render</button>
+  </div>
+  <button id="go" type="button">Görseli oluştur</button>
+  <div id="err" role="alert"></div>
+  <div id="stage">Görselin burada görünecek.</div>
+  <div id="actions"><a id="dl" download="gorsel.png">Görseli indir</a></div>
+</main>
+<script>
+  const promptEl = document.getElementById("prompt");
+  const go = document.getElementById("go");
+  const stage = document.getElementById("stage");
+  const err = document.getElementById("err");
+  const actions = document.getElementById("actions");
+  const dl = document.getElementById("dl");
+
+  document.querySelectorAll(".chip").forEach((c) =>
+    c.addEventListener("click", () => { promptEl.value = c.textContent; promptEl.focus(); })
+  );
+
+  go.addEventListener("click", async () => {
+    const prompt = promptEl.value.trim();
+    err.textContent = "";
+    if (prompt.length < 3) { err.textContent = "Önce ne istediğini yaz."; return; }
+    go.disabled = true;
+    go.textContent = "Oluşturuluyor…";
+    stage.className = "";
+    stage.textContent = "Çiziliyor…";
+    actions.style.display = "none";
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Bir şeyler ters gitti.");
+      }
+      const url = URL.createObjectURL(await res.blob());
+      stage.className = "has-img";
+      stage.innerHTML = "";
+      const img = new Image();
+      img.alt = prompt;
+      img.src = url;
+      stage.appendChild(img);
+      dl.href = url;
+      actions.style.display = "block";
+    } catch (e) {
+      stage.textContent = "Görselin burada görünecek.";
+      err.textContent = e.message;
+    } finally {
+      go.disabled = false;
+      go.textContent = "Görseli oluştur";
+    }
+  });
+</script>
+</body>
+  </html>
