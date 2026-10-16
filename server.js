@@ -5,7 +5,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HF_TOKEN = process.env.HF_TOKEN;
 const MODEL = process.env.MODEL || "black-forest-labs/FLUX.1-schnell";
-const API_URL = `https://router.huggingface.co/hf-inference/models/${MODEL}`;
 
 app.use(express.json({ limit: "10kb" }));
 app.use(express.static(path.join(__dirname, "public")));
@@ -36,32 +35,24 @@ app.post("/api/generate", rateLimit, async (req, res) => {
   }
 
   try {
-    const r = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${HF_TOKEN}`,
-        "Content-Type": "application/json",
-        Accept: "image/png",
-      },
-      body: JSON.stringify({ inputs: prompt }),
+    const { InferenceClient } = await import("@huggingface/inference");
+    const client = new InferenceClient(HF_TOKEN);
+    const blob = await client.textToImage({
+      provider: "auto",
+      model: MODEL,
+      inputs: prompt,
     });
-
-    if (!r.ok) {
-      const text = await r.text();
-      console.error("HF hata:", r.status, text);
-      const msg =
-        r.status === 503
-          ? "Model uyanıyor, 20 saniye sonra tekrar dene."
-          : "Görsel oluşturulamadı.";
-      return res.status(502).json({ error: msg });
-    }
-
-    const buf = Buffer.from(await r.arrayBuffer());
-    res.set("Content-Type", r.headers.get("content-type") || "image/png");
+    const buf = Buffer.from(await blob.arrayBuffer());
+    res.set("Content-Type", blob.type || "image/png");
     res.send(buf);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Sunucu hatası." });
+    console.error("HF hata:", e.message);
+    const credit = /credit|402|quota|limit/i.test(e.message || "");
+    res.status(502).json({
+      error: credit
+        ? "Ücretsiz kota doldu, daha sonra tekrar dene."
+        : "Görsel oluşturulamadı.",
+    });
   }
 });
 
